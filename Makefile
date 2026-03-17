@@ -17,6 +17,10 @@ DEPS =	flake8 \
 all: run
 
 install:
+	@if [ ! -e $(UV) ]; then \
+		echo "installing uv..."; \
+		curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1; \
+	fi
 	@$(UV) sync >/dev/null 2>&1
 	@$(UV) add $(DEPS)
 

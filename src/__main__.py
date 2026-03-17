@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-from src.generation import run_generation
+from src import GenerationDevice
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,13 +26,21 @@ def parse_args() -> argparse.Namespace:
         help="Path to save results"
     )
 
+    parser.add_argument(
+        "--prompt",
+        default="What is 2+2? Answer in less than 20 words.",
+        help="Prompt"
+    )
+
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     try:
-        run_generation(args.functions_definition, args.input, args.output)
+        device = GenerationDevice()
+        print(device.prompt(args.prompt))
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
