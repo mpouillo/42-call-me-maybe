@@ -5,12 +5,14 @@
 NAME = call_me_maybe
 PYTHON = python3
 UV = $(shell command -v uv 2> /dev/null || echo $(HOME)/.local/bin/uv)
+ENV = --env-file .env
 
 DEPS =	flake8 \
 		huggingface_hub \
 		mypy \
 		pudb \
 		pydantic \
+		regex \
 		torch \
 		transformers
 
@@ -25,10 +27,10 @@ install:
 	@$(UV) add $(DEPS)
 
 run:
-	@$(UV) run python -m src
+	@$(UV) run ${ENV} python -m src
 
 debug:
-	@$(UV) run python -m pudb -m src
+	@$(UV) run ${ENV} python -m pudb -m src
 
 lint:
 	@echo "Running flake8..."
@@ -53,5 +55,5 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: install run debug clean fclean re all
+.PHONY: all install run debug lint lint-strict clean fclean re
 .DEFAULT_GOAL = all
