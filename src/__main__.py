@@ -57,8 +57,8 @@ def parse_definitions(definitions_file: str) -> list[dict[str, Any]]:
 
 def main() -> None:
     args = parse_args()
-    prompts: list[str] = parse_prompts(args.input)
-    definitions: list[dict[str, Any]] = parse_definitions(args.definitions)
+    prompts = parse_prompts(args.input)
+    definitions = parse_definitions(args.definitions)
 
     decoder = ConstrainedDecoder(prompts, definitions)
     output = decoder.process_prompts()
