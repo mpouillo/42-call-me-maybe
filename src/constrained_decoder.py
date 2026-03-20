@@ -1,6 +1,6 @@
 import json
-import numpy    # type: ignore
-import regex    # type: ignore
+import numpy
+import regex
 import sys
 from typing import Any
 from llm_sdk.llm_sdk import Small_LLM_Model
@@ -30,20 +30,6 @@ class ConstrainedDecoder:
         except (FileNotFoundError, PermissionError):
             sys.exit("Error while parsing model vocabulary")
 
-    def build_mask(self, reg_exp, current_text, next_logits):
-        mask = numpy.full(len(next_logits), -float('inf'))
-        for token_id in range(len(next_logits)):    # Slow, to fix
-            if token_id not in self.vocab:
-                continue
-            token_str = self.vocab[token_id]
-            clean_token = self.clean_token(token_str)
-            candidate = current_text + clean_token
-
-            if regex.fullmatch(reg_exp, candidate, partial=True):
-                mask[token_id] = 0
-
-        return mask
-
     def get_context(self, user_prompt):
         return f"""
             ### Instruction:
@@ -53,15 +39,32 @@ class ConstrainedDecoder:
             {json.dumps(self.definitions, indent=2)}
 
             ### Constraint Rules:
+            - CRITICAL: The output must always be valid JSON.
             - Function names must be one of the ones defined above.
             - Parameters must match the types defined above.
-            - The output must be valid JSON.
+            - Limit your thoughts to maximum 10 sentences (as defined per ending with a '.').
 
             ### User Input:
             {user_prompt}
 
             ### Assistant Response (JSON):
             """
+
+    def get_best_token(self, manager, next_logits):
+        sorted_tokens = numpy.argsort(next_logits)[::-1]
+
+        for token_id in sorted_tokens:
+            tid = int(token_id)
+
+            if tid not in self.vocab:
+                continue
+
+            token_str = self.clean_token(self.vocab[token_id])
+            candidate = manager.current_string + token_str
+
+            if regex.fullmatch(manager.state.get_regex(), candidate, partial=True):
+                return tid, token_str
+        return 0
 
     def str_to_ids(self, string):
         return list(self.model.encode(string))[0].tolist()
@@ -76,23 +79,18 @@ class ConstrainedDecoder:
 
             print(f"Processing prompt [{i}/{len(self.prompts)}]: '{prompt}'")
 
-            manager = SequenceManager(prompt, self.definitions)
+            manager = StateManager(prompt, self.definitions)
             context_ids = self.str_to_ids(self.get_context(prompt))
             gen_ids = []
 
             while manager.state != "done":
 
                 logits = self.model.get_logits_from_input_ids(context_ids + gen_ids)
-                mask = self.build_mask(manager.get_regex(), manager.current_string, logits)
+                token_id, token_str = self.get_best_token(manager, logits)
 
-                next_token_id = numpy.argmax(logits + mask)
-                if next_token_id == self.EOS_TOKEN:
-                    continue
-
-                token_str = self.clean_token(self.vocab[next_token_id])
                 manager.current_string += token_str
                 manager.output_string += token_str
-                gen_ids.append(next_token_id)
+                gen_ids.append(token_id)
 
                 manager.on_value(manager.current_string)
 
@@ -100,7 +98,7 @@ class ConstrainedDecoder:
 
         return final_output
 
-class SequenceManager:
+class StateManager:
     """State machine representing the generation steps of an LLM"""
     def __init__(self,
                  prompt: str,
@@ -124,6 +122,9 @@ class SequenceManager:
         def __init__(self, outer):
             self.outer = outer
 
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
+
         def get_regex(self):
             return r'\{'
 
@@ -135,8 +136,11 @@ class SequenceManager:
         def __init__(self, outer):
             self.outer = outer
 
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
+
         def get_regex(self):
-            return r'"thought":\s'
+            return r'"thought":\s?'
 
         def on_value(self, value):
             if regex.fullmatch(self.get_regex(), value):
@@ -145,9 +149,18 @@ class SequenceManager:
     class ThoughtValueState:
         def __init__(self, outer):
             self.outer = outer
+            self.prefixes = [
+                "I will use",
+                "Based on the user input,",
+                "To answer this,"
+            ]
+
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
 
         def get_regex(self):
-            return r'"(I will use|Based on the user input,|To answer this,) [^"]{0,999}",\s'
+            return (fr'"(?:({"|".join(self.prefixes)})) '
+                    + r'(?:(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4})*?\. ?){1,10}",\s?')
 
         def on_value(self, value):
             if regex.fullmatch(self.get_regex(), value):
@@ -157,8 +170,11 @@ class SequenceManager:
         def __init__(self, outer):
             self.outer = outer
 
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
+
         def get_regex(self):
-            return r'"prompt":\s'
+            return r'"prompt":\s?'
 
         def on_value(self, value):
             if regex.fullmatch(self.get_regex(), value):
@@ -167,10 +183,13 @@ class SequenceManager:
     class PromptValueState:
         def __init__(self, outer):
             self.outer = outer
+            self.escaped_prompt = json.dumps(self.outer.prompt)[1:-1]
+
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
 
         def get_regex(self):
-            escaped_prompt = json.dumps(self.outer.prompt)[1:-1]
-            return fr'"{regex.escape(escaped_prompt)}",\s?'
+            return fr'"{regex.escape(self.escaped_prompt)}",\s?'
 
         def on_value(self, value):
             if regex.fullmatch(self.get_regex(), value):
@@ -179,6 +198,9 @@ class SequenceManager:
     class NameKeyState:
         def __init__(self, outer):
             self.outer = outer
+
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
 
         def get_regex(self):
             return r'"name":\s'
@@ -191,6 +213,9 @@ class SequenceManager:
         def __init__(self, outer):
             self.outer = outer
 
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
+
         def get_regex(self):
             return fr'"({"|".join(f['name'] for f in self.outer.definitions)})",\s?'
 
@@ -201,6 +226,9 @@ class SequenceManager:
     class ParametersKeyState:
         def __init__(self, outer):
             self.outer = outer
+
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
 
         def get_regex(self):
             return r'"parameters":\s'
@@ -229,7 +257,7 @@ class SequenceManager:
                 if p_info["type"] == "number":
                     p_regex = r'[+-]?([0-9]*[.])?[0-9]+'
                 else:
-                    p_regex = r'"(?:[^"\\]|\\.)*"'
+                    p_regex = r'"(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4})*"'
 
                 prefix = r'\{' if i == 0 else ', '
                 total_regex += prefix + fr'"{p_name}":\s' + p_regex
@@ -238,6 +266,9 @@ class SequenceManager:
 
         def get_regex(self):
             return self.regex_value
+
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
 
         def on_value(self, value):
             if regex.fullmatch(self.get_regex(), value):
@@ -249,6 +280,9 @@ class SequenceManager:
 
         def get_regex(self):
             return r'\}'
+
+        def is_valid_continuation(self, candidate: str) -> bool:
+            return regex.fullmatch(self.get_regex(), candidate)
 
         def on_value(self, value):
             if regex.fullmatch(self.get_regex(), value):

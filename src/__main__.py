@@ -74,7 +74,7 @@ def print_output_to_file(model_answers: str, output_path: str) -> None:
         for answer in processed_answers:
             answer.pop("thought")
     except json.JSONDecodeError as e:
-        print(f"Error encoding model output to JSON objects: {e}",)
+        print(f"Error encoding model output to JSON objects: {e}")
         sys.exit(1)
 
     if path.is_dir():
