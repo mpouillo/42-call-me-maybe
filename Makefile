@@ -7,7 +7,8 @@ PYTHON = python3
 UV = $(shell command -v uv 2> /dev/null || echo $(HOME)/.local/bin/uv)
 ENV = --env-file .env
 
-DEPS =	flake8 \
+DEPS =	accelerate \
+		flake8 \
 		huggingface_hub \
 		mypy \
 		pudb \

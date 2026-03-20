@@ -5,6 +5,7 @@ description = "Call Me Maybe - Introduction to LLM Function Calling"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "accelerate>=1.13.0",
     "flake8>=7.3.0",
     "huggingface-hub>=1.7.1",
     "mypy>=1.19.1",

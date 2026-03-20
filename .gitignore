@@ -219,3 +219,4 @@ __marimo__/
 .python-version
 reqs
 .env
+data/output
