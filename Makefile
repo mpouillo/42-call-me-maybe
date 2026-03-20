@@ -6,6 +6,7 @@ NAME = call_me_maybe
 PYTHON = python3
 UV = $(shell command -v uv 2> /dev/null || echo $(HOME)/.local/bin/uv)
 ENV = --env-file .env
+SRC = src
 
 DEPS =	accelerate \
 		flake8 \
@@ -28,23 +29,23 @@ install:
 	@$(UV) add $(DEPS)
 
 run:
-	@$(UV) run ${ENV} python -m src
+	@$(UV) run ${ENV} python -m $(SRC)
 
 debug:
-	@$(UV) run ${ENV} python -m pudb -m src
+	@$(UV) run ${ENV} python -m pudb -m $(SRC)
 
 lint:
 	@echo "Running flake8..."
-	@$(UV) run flake8 .
+	@$(UV) run flake8 $(SRC)
 	@echo "Running mypy..."
-	@$(UV) run mypy .
+	@$(UV) run mypy $(SRC)
 
 
 lint-strict:
 	@echo "Running flake8..."
-	@$(UV) run flake8 .
+	@$(UV) run flake8 $(SRC)
 	@echo "Running mypy --strict..."
-	@$(UV) run mypy . --strict
+	@$(UV) run mypy $(SRC) --strict
 
 clean:
 	@echo "Cleaning cache files..."
