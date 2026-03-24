@@ -1,16 +1,18 @@
-from __future__ import annotations
-
 import json
 import regex
 
 from pydantic import BaseModel, ConfigDict, Field
-from .manager import StateManager
 from typing import Any, List, Optional
+
+from .manager import StateManager
 
 
 class BaseState(BaseModel):
+    """Base state class that all states inherit from"""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     manager: "StateManager"
+    string: Optional[str] = None
 
     def get_regex(self) -> str:
         raise NotImplementedError
@@ -22,16 +24,21 @@ class BaseState(BaseModel):
 class OpeningCurlyBracesState(BaseState):
     """State checking for the opening curly brace of the JSON object."""
 
+    string: str = "{"
+
     def get_regex(self) -> str:
         return regex.escape("{")
 
-    def on_value(self, value: str) -> Optional['ThoughtKeyState']:
+    def on_value(self, value: str) -> Optional['PromptKeyState']:
         if regex.fullmatch(self.get_regex(), value):
-            return ThoughtKeyState(manager=self.manager)
+            return PromptKeyState(manager=self.manager)
         return None
+
 
 class ThoughtKeyState(BaseState):
     """State checking for the 'thought' JSON key."""
+
+    string: str = "\"thought\": "
 
     def get_regex(self):
         return r'"thought":\s?'
@@ -40,6 +47,7 @@ class ThoughtKeyState(BaseState):
         if regex.fullmatch(self.get_regex(), value):
             return ThoughtValueState(manager=self.manager)
         return None
+
 
 class ThoughtValueState(BaseState):
     """State checking for the 'thought' JSON value."""
@@ -51,16 +59,23 @@ class ThoughtValueState(BaseState):
     ])
 
     def get_regex(self):
-        return (fr'"(?:({"|".join(regex.escape(prefix) for prefix in self.prefixes)})) '
-                + r'(?:(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4})*?\. ?){1,10}",\s?')
+        prefixes = "|".join(regex.escape(p) for p in self.prefixes)
+        return (
+            fr'"(?:({prefixes})) '
+            r'(?:(?:[^"\\]|\\["\\/bfnrt]|'
+            r'\\u[a-fA-F0-9]{4})*?\. ?){1,10}",\s?'
+        )
 
     def on_value(self, value: str) -> Optional['PromptKeyState']:
         if regex.fullmatch(self.get_regex(), value):
             return PromptKeyState(manager=self.manager)
         return None
 
+
 class PromptKeyState(BaseState):
     """State checking for the 'prompt' JSON key."""
+
+    string: str = "\"prompt\": "
 
     def get_regex(self):
         return r'"prompt":\s?'
@@ -70,14 +85,15 @@ class PromptKeyState(BaseState):
             return PromptValueState(manager=self.manager)
         return None
 
+
 class PromptValueState(BaseState):
     """State checking for the 'prompt' JSON value."""
 
     escaped_prompt: str = ""
 
     def model_post_init(self, __context: Any) -> None:
-        if not self.escaped_prompt:
-            self.escaped_prompt = json.dumps(self.manager.prompt)[1:-1]
+        self.escaped_prompt = json.dumps(self.manager.prompt)[1:-1]
+        self.string = f"\"{self.escaped_prompt}\", "
 
     def get_regex(self):
         return fr'"{regex.escape(self.escaped_prompt)}",\s?'
@@ -87,30 +103,38 @@ class PromptValueState(BaseState):
             return NameKeyState(manager=self.manager)
         return None
 
+
 class NameKeyState(BaseState):
     """State checking for the 'name' JSON key."""
 
+    string: str = "\"name\": "
+
     def get_regex(self):
-        return r'"name":\s'
+        return r'"name":\s?'
 
     def on_value(self, value: str) -> Optional['NameValueState']:
         if regex.fullmatch(self.get_regex(), value):
             return NameValueState(manager=self.manager)
         return None
 
+
 class NameValueState(BaseState):
     """State checking for the 'name' JSON value."""
 
     def get_regex(self):
-        return fr'"({"|".join(f['name'] for f in self.manager.definitions)})",\s?'
+        name_patterns = "|".join(f["name"] for f in self.manager.definitions)
+        return fr'"({name_patterns})",\s?'
 
     def on_value(self, value: str) -> Optional['ParametersKeyState']:
         if regex.fullmatch(self.get_regex(), value):
             return ParametersKeyState(manager=self.manager)
         return None
 
+
 class ParametersKeyState(BaseState):
     """State checking for the 'parameters' JSON key."""
+
+    string: str = "\"parameters\": "
 
     def get_regex(self):
         return r'"parameters":\s?'
@@ -119,6 +143,7 @@ class ParametersKeyState(BaseState):
         if regex.fullmatch(self.get_regex(), value):
             return ParametersValueState(manager=self.manager)
         return None
+
 
 class ParametersValueState(BaseState):
     """State checking for the 'parameters' JSON value."""
@@ -131,23 +156,26 @@ class ParametersValueState(BaseState):
 
     def _init_regex(self):
         name_state = NameValueState(manager=self.manager)
-        name_match = regex.search(name_state.get_regex(), self.manager.output_string)
+        name_match = regex.search(name_state.get_regex(),
+                                  self.manager.output_string)
         if not name_match:
             raise ValueError("Could not find selected function name in output")
         selected_func = name_match.group(1)
 
-        func_def = next(f for f in self.manager.definitions if f["name"] == selected_func)
+        func_def = next(
+            f for f in self.manager.definitions if f["name"] == selected_func
+        )
         params = list(func_def["parameters"].items())
         total_regex = ""
 
         for i, (p_name, p_info) in enumerate(params):
             if p_info["type"] == "number":
-                p_regex = r'[+-]?([0-9]*[.])?[0-9]+'
+                p_re = r'[+-]?([0-9]{0,999}[.])?[0-9]{1,999}'
             else:
-                p_regex = r'"(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4})*"'
+                p_re = r'"(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4}){0,999}"'
 
             prefix = r'\{' if i == 0 else ', '
-            total_regex += prefix + fr'"{p_name}":\s' + p_regex
+            total_regex += prefix + fr'"{p_name}":\s' + p_re
 
         return total_regex + r'\}'
 
@@ -159,8 +187,11 @@ class ParametersValueState(BaseState):
             return ClosingCurlyBracesState(manager=self.manager)
         return None
 
+
 class ClosingCurlyBracesState(BaseState):
     """State checking for the closing curly brace of the JSON object."""
+
+    string: str = "}"
 
     def get_regex(self):
         return regex.escape("}")

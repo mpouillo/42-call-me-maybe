@@ -18,15 +18,20 @@ DEPS =	accelerate \
 		torch \
 		transformers
 
-all: run
+all:
+	@if [ ! -e ".venv" ]; then \
+		$(MAKE) --no-print-directory install; \
+	else \
+		$(MAKE) --no-print-directory run; \
+	fi
 
 install:
 	@if [ ! -e $(UV) ]; then \
 		echo "installing uv..."; \
 		curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1; \
 	fi
+	@echo "Syncing dependencies..."
 	@$(UV) sync >/dev/null 2>&1
-	@$(UV) add $(DEPS)
 
 run:
 	@$(UV) run ${ENV} python -m $(SRC)

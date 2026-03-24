@@ -4,11 +4,12 @@ import argparse
 import json
 import os
 import sys
+
 from pathlib import Path
 from typing import List, Any
 
-from src import PromptItem, FunctionDefinition, FunctionCallOutput
 from src import ConstrainedDecoder
+from .models import PromptItem, FunctionDefinition, FunctionCallOutput
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,9 +41,10 @@ def validate_output_path(output_path: str) -> Path:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_dir():
-        print(f"Error: output file is a directory", file=sys.stderr)
+        print("Error: output file is a directory", file=sys.stderr)
         sys.exit(1)
     return path
+
 
 def parse_prompts(input_file: str) -> List[str]:
     prompts: List[str] = []
@@ -88,6 +90,7 @@ def print_output_to_file(model_answers: str, output_path: Path) -> None:
     except Exception as e:
         print(f"Error writing output to file: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 def main() -> None:
     args = parse_args()
