@@ -54,7 +54,7 @@ lint-strict:
 
 clean:
 	@echo "Cleaning cache files..."
-	@$(RM) -r .mypy_cache .pytest_cache .uv_cache __pycache__
+	@$(RM) -r */.mypy_cache */.pytest_cache */.uv_cache */__pycache__
 
 fclean: clean
 	@echo "Removing virtual environment..."
