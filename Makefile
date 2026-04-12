@@ -5,7 +5,8 @@
 NAME = call_me_maybe
 PYTHON = python3
 UV = $(shell command -v uv 2> /dev/null || echo $(HOME)/.local/bin/uv)
-ENV = --env-file .env
+UV_PROJECT_ENVIRONMENT ?= .venv
+
 SRC = src
 
 DEPS =	accelerate \
@@ -18,12 +19,7 @@ DEPS =	accelerate \
 		torch \
 		transformers
 
-all:
-	@if [ ! -e ".venv" ]; then \
-		$(MAKE) --no-print-directory install; \
-	else \
-		$(MAKE) --no-print-directory run; \
-	fi
+all: install
 
 install:
 	@if [ ! -e $(UV) ]; then \
@@ -31,13 +27,13 @@ install:
 		curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1; \
 	fi
 	@echo "Syncing dependencies..."
-	@$(UV) sync >/dev/null 2>&1
+	@$(UV) sync
 
 run:
-	@$(UV) run ${ENV} python -m $(SRC)
+	@$(UV) run python -m $(SRC)
 
 debug:
-	@$(UV) run ${ENV} python -m pudb -m $(SRC)
+	@$(UV) run python -m pudb -m $(SRC)
 
 lint:
 	@echo "Running flake8..."
@@ -58,7 +54,7 @@ clean:
 
 fclean: clean
 	@echo "Removing virtual environment..."
-	@$(RM) -r .venv uv.lock
+	$(RM) -r $(UV_PROJECT_ENVIRONMENT) uv.lock
 
 re: fclean all
 
