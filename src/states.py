@@ -6,6 +6,13 @@ from typing import Any, List, Optional
 
 from .manager import StateManager
 
+BOOLEAN_RE = r'(?:true|false|null)'
+STRING_RE = r'"(?:[^"\\]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4}){0,999}"'
+NUMBER_RE = r'-?(?:0|[1-9][0-9]{0,50})(?:\.[0-9]{1,50})?(?:[eE][+-]?[0-9]{1,5})?'
+INTEGER_RE = r'-?(?:0|[1-9][0-9]{0,50})'
+VALUE_RE = fr'(?:{NUMBER_RE}|{STRING_RE}|{BOOLEAN_RE})'
+ARRAY_RE = fr'\[\s?{VALUE_RE}?(?:\s?,\s?{VALUE_RE}){0,99}\s?\]'
+
 
 class BaseState(BaseModel):
     """Base state class that all states inherit from"""
@@ -169,10 +176,17 @@ class ParametersValueState(BaseState):
         total_regex = ""
 
         for i, (p_name, p_info) in enumerate(params):
-            if p_info["type"] == "number":
-                p_re = r'[+-]?([0-9]{0,999}[.])?[0-9]{1,999}'
-            else:
-                p_re = r'"(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4}){0,999}"'
+            match p_info["type"]:
+                case "number":
+                    p_re = NUMBER_RE
+                case "integer":
+                    p_re = INTEGER_RE
+                case "array":
+                    p_re = ARRAY_RE
+                case "boolean":
+                    p_re = BOOLEAN_RE
+                case _:
+                    p_re = STRING_RE
 
             prefix = r'\{' if i == 0 else ', '
             total_regex += prefix + fr'"{p_name}":\s' + p_re
