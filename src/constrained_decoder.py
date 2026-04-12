@@ -5,7 +5,7 @@ import sys
 
 from llm_sdk.llm_sdk import Small_LLM_Model
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Tuple, cast
 
 from .manager import StateManager
 
@@ -25,7 +25,7 @@ class ConstrainedDecoder(BaseModel):
 
     prompts: List[str]
     definitions: List[Dict[str, Any]]
-    model_name: Optional[str] = "Qwen/Qwen3-0.6B"
+    model_name: str = "Qwen/Qwen3-0.6B"
     model: Any = Field(default_factory=Small_LLM_Model)
     vocab: Dict[int, str] = Field(default_factory=dict)
 
@@ -44,35 +44,34 @@ class ConstrainedDecoder(BaseModel):
             print("Error while parsing model vocabulary", file=sys.stderr)
             sys.exit(1)
 
-    def get_context(self, user_prompt):
+    def get_context(self, user_prompt: str) -> str:
         """
         Generate the context string with
         instructions and function schemas.
         """
         return f"""\
-            ### Instruction:
-            You are a function-calling assistant. \
+### Instruction:
+You are a function-calling assistant. \
 Based on the user's input, you must select the \
 appropriate function and extract the correct parameters.
 
-            ### Available Functions:
-            {json.dumps(self.definitions, indent=2)}
+### Available Functions:
+{json.dumps(self.definitions, indent=2)}
 
-            ### Constraint Rules:
-            - CRITICAL: The output must always be valid JSON.
-            - Function names must be one of the ones defined above.
-            - Parameters must match the types defined above.
-            - Limit your thoughts to maximum 10 sentences \
-(as defined per ending with a '.').
+### Constraint Rules:
+- CRITICAL: The output must always be valid JSON.
+- Function names must be one of the ones defined above.
+- Parameters must match the types defined above.
 
-            ### User Input:
-            {user_prompt}
+### User Input:
+{user_prompt}
 
-            ### Assistant Response (JSON):
-            """
+### Assistant Response (JSON):
+"""
 
     def get_best_token(self, manager: 'StateManager',
-                       next_logits: numpy.ndarray) -> Tuple[int, str]:
+                       next_logits: numpy.typing.NDArray[numpy.float64]
+                       ) -> Tuple[int, str]:
         """
         Find the most probable token that
         satisfies the current regex constraints.
@@ -94,11 +93,18 @@ appropriate function and extract the correct parameters.
 
     def str_to_ids(self, string: str) -> List[int]:
         """Encode a string into a list of token IDs."""
-        return list(self.model.encode(string))[0].tolist()
+        tokens = self.model.encode(string)
+        return cast(List[int], tokens[0].tolist())
+
+    def ids_to_str(self, ids: list[int]) -> str:
+        output_string = ""
+        for tid in ids:
+            output_string += self.clean_token(self.vocab[tid])
+        return (output_string)
 
     def clean_token(self, token: str) -> str:
         """Clean special characters from the token string."""
-        return token.replace('\u0120', ' ')
+        return token.replace('\u0120', ' '). replace('Ċ', '\n')
 
     def process_prompts(self) -> List[str]:
         """Process all prompts and return the generated JSON strings."""

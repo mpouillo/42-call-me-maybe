@@ -19,10 +19,14 @@ class StateManager(BaseModel):
         from .states import OpeningCurlyBracesState
         self.state = OpeningCurlyBracesState(manager=self)
 
-    def is_solid_state(self):
-        return hasattr(self.state, "string") and self.state.string
+    def is_solid_state(self) -> bool:
+        return (
+            self.state is not None
+            and hasattr(self.state, "string")
+            and self.state.string
+        )
 
-    def get_regex(self) -> str:
+    def get_regex(self) -> Any:
         """Retrieve the regex pattern for the current state."""
         return self.state.get_regex()
 

@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--functions-definition",
+        "--functions_definition",
         default="data/input/functions_definition.json",
         help="Path to functions definition file",
         dest="definitions"
@@ -71,7 +71,7 @@ def parse_definitions(definitions_file: str) -> list[dict[str, Any]]:
         sys.exit(1)
 
 
-def print_output_to_file(model_answers: str, output_path: Path) -> None:
+def print_output_to_file(model_answers: list[str], output_path: Path) -> None:
     try:
         processed_answers = []
         for answer in model_answers:

@@ -8,9 +8,9 @@ from .manager import StateManager
 
 BOOLEAN_RE = r'(?:true|false|null)'
 STRING_RE = r'"(?:[^"\\]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4}){0,999}"'
-NUMBER_RE = r'-?(?:0|[1-9][0-9]{0,50})(?:\.[0-9]{1,50})?(?:[eE][+-]?[0-9]{1,5})?'
+NBR_RE = r'-?(?:0|[1-9][0-9]{0,50})(?:\.[0-9]{1,50})?(?:[eE][+-]?[0-9]{1,5})?'
 INTEGER_RE = r'-?(?:0|[1-9][0-9]{0,50})'
-VALUE_RE = fr'(?:{NUMBER_RE}|{STRING_RE}|{BOOLEAN_RE})'
+VALUE_RE = fr'(?:{NBR_RE}|{STRING_RE}|{BOOLEAN_RE})'
 ARRAY_RE = fr'\[\s?{VALUE_RE}?(?:\s?,\s?{VALUE_RE}){0,99}\s?\]'
 
 
@@ -21,10 +21,10 @@ class BaseState(BaseModel):
     manager: "StateManager"
     string: Optional[str] = None
 
-    def get_regex(self) -> str:
+    def get_regex(self) -> Any:
         raise NotImplementedError
 
-    def on_value(self, value: str) -> Optional["BaseState"]:
+    def on_value(self, value: str) -> Any:
         raise NotImplementedError
 
 
@@ -33,7 +33,7 @@ class OpeningCurlyBracesState(BaseState):
 
     string: str = "{"
 
-    def get_regex(self) -> str:
+    def get_regex(self) -> Any:
         return regex.escape("{")
 
     def on_value(self, value: str) -> Optional['PromptKeyState']:
@@ -47,7 +47,7 @@ class ThoughtKeyState(BaseState):
 
     string: str = "\"thought\": "
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return r'"thought":\s?'
 
     def on_value(self, value: str) -> Optional['ThoughtValueState']:
@@ -65,7 +65,7 @@ class ThoughtValueState(BaseState):
         "To answer this,"
     ])
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         prefixes = "|".join(regex.escape(p) for p in self.prefixes)
         return (
             fr'"(?:({prefixes})) '
@@ -84,7 +84,7 @@ class PromptKeyState(BaseState):
 
     string: str = "\"prompt\": "
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return r'"prompt":\s?'
 
     def on_value(self, value: str) -> Optional['PromptValueState']:
@@ -102,7 +102,7 @@ class PromptValueState(BaseState):
         self.escaped_prompt = json.dumps(self.manager.prompt)[1:-1]
         self.string = f"\"{self.escaped_prompt}\", "
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return fr'"{regex.escape(self.escaped_prompt)}",\s?'
 
     def on_value(self, value: str) -> Optional['NameKeyState']:
@@ -116,7 +116,7 @@ class NameKeyState(BaseState):
 
     string: str = "\"name\": "
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return r'"name":\s?'
 
     def on_value(self, value: str) -> Optional['NameValueState']:
@@ -128,7 +128,7 @@ class NameKeyState(BaseState):
 class NameValueState(BaseState):
     """State checking for the 'name' JSON value."""
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         name_patterns = "|".join(f["name"] for f in self.manager.definitions)
         return fr'"({name_patterns})",\s?'
 
@@ -143,7 +143,7 @@ class ParametersKeyState(BaseState):
 
     string: str = "\"parameters\": "
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return r'"parameters":\s?'
 
     def on_value(self, value: str) -> Optional['ParametersValueState']:
@@ -161,7 +161,7 @@ class ParametersValueState(BaseState):
         if not self.regex_value:
             self.regex_value = self._init_regex()
 
-    def _init_regex(self):
+    def _init_regex(self) -> str:
         name_state = NameValueState(manager=self.manager)
         name_match = regex.search(name_state.get_regex(),
                                   self.manager.output_string)
@@ -178,7 +178,7 @@ class ParametersValueState(BaseState):
         for i, (p_name, p_info) in enumerate(params):
             match p_info["type"]:
                 case "number":
-                    p_re = NUMBER_RE
+                    p_re = NBR_RE
                 case "integer":
                     p_re = INTEGER_RE
                 case "array":
@@ -193,7 +193,7 @@ class ParametersValueState(BaseState):
 
         return total_regex + r'\}'
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return self.regex_value
 
     def on_value(self, value: str) -> Optional['ClosingCurlyBracesState']:
@@ -207,7 +207,7 @@ class ClosingCurlyBracesState(BaseState):
 
     string: str = "}"
 
-    def get_regex(self):
+    def get_regex(self) -> Any:
         return regex.escape("}")
 
     def on_value(self, value: str) -> Optional[str]:
