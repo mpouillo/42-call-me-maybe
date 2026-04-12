@@ -54,7 +54,7 @@ clean:
 
 fclean: clean
 	@echo "Removing virtual environment..."
-	$(RM) -r $(UV_PROJECT_ENVIRONMENT) uv.lock
+	$(RM) -r $(UV_PROJECT_ENVIRONMENT)
 
 re: fclean all
 
