@@ -267,7 +267,6 @@ Answer in `output/function_calls.json`:
 - [uv documentation](https://docs.astral.sh/uv/)
 - [Building a simple State Machine in Python.](https://dev.to/karn/building-a-simple-state-machine-in-python)
 - [Introducing JSON](https://www.json.org/json-en.html)
-- [Implement a Trie in Python](https://wangyy395.medium.com/implement-a-trie-in-python-e8dd5c5fde3a)
 - [Regex101](https://regex101.com/)
 - AI was used to
     - help understand basic LLM functionalities
